@@ -25,6 +25,11 @@ import (
 	"github.com/gizahNL/gojail"
 )
 
+// Attempt to clean up epair interfaces after an error
+func cleanEpair(epairA string) {
+	_ = exec.Command("ifconfig", epairA, "destroy").Run()
+}
+
 func makeEpair(contName, hostName string, mtu int, mac string, contNS gojail.Jail) (*net.Interface, *net.Interface, error) {
 	// Create the pair - ifconfig outputs "epairNNa"
 	res, err := exec.Command("ifconfig", "epair", "create").Output()
@@ -35,32 +40,39 @@ func makeEpair(contName, hostName string, mtu int, mac string, contNS gojail.Jai
 	epairB := epairA[0:len(epairA)-1] + "b"
 
 	if err := exec.Command("ifconfig", epairA, "name", hostName).Run(); err != nil {
+		cleanEpair(epairA)
 		return nil, nil, fmt.Errorf("failed to rename interface %s: %v", epairA, err)
 	}
 	ifA, err := net.InterfaceByName(hostName)
 	if err != nil {
+		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to lookup interface %s: %v", hostName, err)
 	}
 	if err := exec.Command("ifconfig", ifA.Name, "description", fmt.Sprintf("associated with jail: %d as nic: %s", contNS.ID(), contName)).Run(); err != nil {
+		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to set description interface %s: %v", ifA.Name, err)
 	}
 	if mtu != 0 {
 		if err := exec.Command("ifconfig", ifA.Name, "mtu", strconv.Itoa(mtu)).Run(); err != nil {
+			cleanEpair(ifA.Name)
 			return nil, nil, fmt.Errorf("failed to set mtu %d interface %s: %v", mtu, ifA.Name, err)
 		}
 	}
 
 	ifB, err := net.InterfaceByName(epairB)
 	if err != nil {
+		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to lookup interface %s: %v", epairB, err)
 	}
 	if mtu != 0 {
 		if err := exec.Command("ifconfig", ifB.Name, "mtu", strconv.Itoa(mtu)).Run(); err != nil {
+			cleanEpair(ifA.Name)
 			return nil, nil, fmt.Errorf("failed to set mtu %d interface %s: %v", mtu, ifB.Name, err)
 		}
 	}
 	if mac != "" {
 		if err := exec.Command("ifconfig", ifB.Name, "link", mac).Run(); err != nil {
+			cleanEpair(ifA.Name)
 			return nil, nil, fmt.Errorf("failed to set link %s interface %s: %v", mac, ifB.Name, err)
 		}
 	}
@@ -68,9 +80,11 @@ func makeEpair(contName, hostName string, mtu int, mac string, contNS gojail.Jai
 	// Move the b side into the jail before setting its name
 	jid := strconv.Itoa(int(contNS.ID()))
 	if err := exec.Command("ifconfig", ifB.Name, "vnet", jid).Run(); err != nil {
+		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to move %s to jail %s : %v", ifB.Name, jid, err)
 	}
 	if err := exec.Command("jexec", jid, "ifconfig", ifB.Name, "name", contName).Run(); err != nil {
+		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to set name %s interface %s: %v", contName, epairB, err)
 	}
 
