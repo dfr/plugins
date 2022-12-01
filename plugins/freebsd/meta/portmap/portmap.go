@@ -103,10 +103,26 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 
 	// Try to parse pf.conf to pick up the v4/v6 egress interfaces
-	out, err := exec.Command("grep", "^[[:space:]]*v[46]egress_if[[:space:]]*=", "/etc/pf.conf").Output()
+	out, err := exec.Command("grep", "^[[:space:]]*\\(v[46]\\)\\?egress_if[[:space:]]*=", "/etc/pf.conf").Output()
 	var rules []string
 	if err == nil {
 		rules = strings.Split(string(out), "\n")
+	}
+
+	// Try to figure out the right variable(s) for egress and fall back to
+	// assuming the egress group.
+	v4egress := "egress"
+	v6egress := "egress"
+	for _, rule := range rules {
+		rule = strings.TrimSpace(rule)
+		if strings.HasPrefix(rule, "egress_if") {
+			v4egress = "$egress_if"
+			v6egress = "$egress_if"
+		} else if strings.HasPrefix(rule, "v4egress_if") {
+			v4egress = "$v4egress_if"
+		} else if strings.HasPrefix(rule, "v6egress_if") {
+			v4egress = "$v6egress_if"
+		}
 	}
 
 	if len(netConf.RuntimeConfig.PortMaps) == 0 {
@@ -116,7 +132,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	netConf.ContainerID = args.ContainerID
 
 	if netConf.ContIPv4.IP != nil {
-		rules4, err := forwardPorts(netConf, netConf.ContIPv4, "$v4egress_if")
+		rules4, err := forwardPorts(netConf, netConf.ContIPv4, v4egress)
 		if err != nil {
 			return err
 		}
@@ -124,7 +140,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 
 	if netConf.ContIPv6.IP != nil {
-		rules6, err := forwardPorts(netConf, netConf.ContIPv6, "$v6egress_if")
+		rules6, err := forwardPorts(netConf, netConf.ContIPv6, v6egress)
 		if err != nil {
 			return err
 		}
