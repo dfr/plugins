@@ -122,8 +122,8 @@ func loadNetConf(bytes []byte, envArgs string) (*NetConf, string, error) {
 
 // calcGateways processes the results from the IPAM plugin and does the
 // following for each IP family:
-//    - Calculates and compiles a list of gateway addresses
-//    - Adds a default route if needed
+//   - Calculates and compiles a list of gateway addresses
+//   - Adds a default route if needed
 func calcGateways(result *current.Result, n *NetConf) (*gwInfo, *gwInfo, error) {
 
 	gwsV4 := &gwInfo{}
@@ -681,6 +681,119 @@ func main() {
 }
 
 func cmdCheck(args *skel.CmdArgs) error {
-	// TODO: implement
-	return fmt.Errorf("not implemented")
+	n, _, err := loadNetConf(args.StdinData, args.Args)
+	if err != nil {
+		return err
+	}
+
+	// run the IPAM plugin and get back the config to apply
+	err = ipam.ExecCheck(n.IPAM.Type, args.StdinData)
+	if err != nil {
+		return err
+	}
+
+	// Parse previous result.
+	if n.NetConf.RawPrevResult == nil {
+		return fmt.Errorf("Required prevResult missing")
+	}
+
+	if err := version.ParsePrevResult(&n.NetConf); err != nil {
+		return err
+	}
+
+	result, err := current.NewResultFromResult(n.PrevResult)
+	if err != nil {
+		return err
+	}
+
+	var contMap current.Interface
+
+	// Find interfaces for names whe know, CNI Bridge and container
+	for _, intf := range result.Interfaces {
+		/*if n.BrName == intf.Name {
+			brMap = *intf
+			continue
+		} else*/if args.IfName == intf.Name {
+			if args.Netns == intf.Sandbox {
+				contMap = *intf
+				continue
+			}
+		}
+	}
+
+	/*brCNI, err := validateCniBrInterface(brMap, n)
+	if err != nil {
+		return err
+	}*/
+
+	// The namespace must be the same as what was configured
+	if args.Netns != contMap.Sandbox {
+		return fmt.Errorf("Sandbox in prevResult %s doesn't match configured netns: %s",
+			contMap.Sandbox, args.Netns)
+	}
+
+	// Check interface against values found in the container
+	/*if err := netns.Do(func(_ ns.NetNS) error {
+		contCNI, errLink = validateCniContainerInterface(contMap)
+		if errLink != nil {
+			return errLink
+		}
+		return nil
+	}); err != nil {
+		return err
+	}*/
+
+	// Now look for veth that is peer with container interface.
+	// Anything else wasn't created by CNI, skip it
+	/*for _, intf := range result.Interfaces {
+		// Skip this result if name is the same as cni bridge
+		// It's either the cni bridge we dealt with above, or something with the
+		// same name in a different namespace.  We just skip since it's not ours
+		if brMap.Name == intf.Name {
+			continue
+		}
+
+		// same here for container name
+		if contMap.Name == intf.Name {
+			continue
+		}
+
+		vethCNI, errLink = validateCniVethInterface(intf, brCNI, contCNI)
+		if errLink != nil {
+			return errLink
+		}
+
+		if vethCNI.found {
+			// veth with container interface as peer and bridge as master found
+			break
+		}
+	}*/
+
+	/*if !brCNI.found {
+		return fmt.Errorf("CNI created bridge %s in host namespace was not found", n.BrName)
+	}
+	if !contCNI.found {
+		return fmt.Errorf("CNI created interface in container %s not found", args.IfName)
+	}
+	if !vethCNI.found {
+		return fmt.Errorf("CNI veth created for bridge %s was not found", n.BrName)
+	}*/
+
+	// Check prevResults for ips, routes and dns against values found in the container
+	/*if err := netns.Do(func(_ ns.NetNS) error {
+		err = ip.ValidateExpectedInterfaceIPs(args.IfName, result.IPs)
+		if err != nil {
+			return err
+		}
+
+		err = ip.ValidateExpectedRoute(result.Routes)
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}*/
+
+	return nil
 }

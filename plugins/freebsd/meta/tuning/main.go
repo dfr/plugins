@@ -146,6 +146,11 @@ func main() {
 }
 
 func cmdCheck(args *skel.CmdArgs) error {
-	// TODO: implement
-	return fmt.Errorf("not implemented")
+	conf, err := parseConfig(args.StdinData)
+	if err != nil {
+		return err
+	}
+	_ = conf
+
+	return nil
 }
