@@ -269,6 +269,12 @@ func bridgeByName(name string) (*net.Interface, error) {
 func ensureBridge(brName string, mtu int, promiscMode, vlanFiltering bool) (*net.Interface, error) {
 	br, err := bridgeByName(brName)
 
+	// Enable filtering on bridge members - this is needed to allow portmap
+	// rules to work for container-to-container communication via the host.
+	if err := exec.Command("sysctl", "net.link.bridge.pfil_member=1").Run(); err != nil {
+		return nil, err
+	}
+
 	if err != nil {
 		if err = exec.Command("ifconfig", "bridge", "create", "name", brName).Run(); err != nil {
 			return nil, err
