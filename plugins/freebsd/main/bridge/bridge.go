@@ -275,6 +275,12 @@ func ensureBridge(brName string, mtu int, promiscMode, vlanFiltering bool) (*net
 		}
 	}
 
+	// Enable filtering on bridge members - this is needed to allow portmap
+	// rules to work for container-to-container communication via the host.
+	if err := exec.Command("sysctl", "net.link.bridge.pfil_member=1").Run(); err != nil {
+		return nil, err
+	}
+
 	// Re-fetch link to read all attributes and if it already existed,
 	// ensure it's really a bridge with similar configuration
 	br, err = bridgeByName(brName)
