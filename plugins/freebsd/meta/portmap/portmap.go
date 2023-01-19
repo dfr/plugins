@@ -75,14 +75,21 @@ func checkPorts(config *PortMapConf, containerNet net.IPNet) error {
 	return nil
 }
 
-func forwardPorts(config *PortMapConf, containerNet net.IPNet, ifname string) ([]string, error) {
+func forwardPorts(config *PortMapConf, containerNet net.IPNet) ([]string, error) {
 	var res []string
 	for _, pmap := range config.RuntimeConfig.PortMaps {
+		// rdr inet proto tcp from any to ! 10.89.0.77 port 8080 -> 10.89.0.77 port 80
+		containerIP := containerNet.IP.String()
+		var af string
+		if containerNet.IP.To4() != nil {
+			af = "inet"
+		} else {
+			af = "inet6"
+		}
 		res = append(res,
 			fmt.Sprintf(
-				"rdr pass on %s proto tcp from any to (%s) port %d -> %s port %d",
-				ifname, ifname, pmap.HostPort, containerNet.IP.String(), pmap.ContainerPort))
-
+				"rdr pass %s proto tcp from any to ! %s port %d -> %s port %d",
+				af, containerIP, pmap.HostPort, containerIP, pmap.ContainerPort))
 	}
 	return res, nil
 }
@@ -108,22 +115,6 @@ func cmdAdd(args *skel.CmdArgs) error {
 		rules = strings.Split(string(out), "\n")
 	}
 
-	// Try to figure out the right variable(s) for egress and fall back to
-	// assuming the egress group.
-	v4egress := "egress"
-	v6egress := "egress"
-	for _, rule := range rules {
-		rule = strings.TrimSpace(rule)
-		if strings.HasPrefix(rule, "egress_if") {
-			v4egress = "$egress_if"
-			v6egress = "$egress_if"
-		} else if strings.HasPrefix(rule, "v4egress_if") {
-			v4egress = "$v4egress_if"
-		} else if strings.HasPrefix(rule, "v6egress_if") {
-			v4egress = "$v6egress_if"
-		}
-	}
-
 	if len(netConf.RuntimeConfig.PortMaps) == 0 {
 		return types.PrintResult(netConf.PrevResult, netConf.CNIVersion)
 	}
@@ -131,7 +122,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	netConf.ContainerID = args.ContainerID
 
 	if netConf.ContIPv4.IP != nil {
-		rules4, err := forwardPorts(netConf, netConf.ContIPv4, v4egress)
+		rules4, err := forwardPorts(netConf, netConf.ContIPv4)
 		if err != nil {
 			return err
 		}
@@ -139,7 +130,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	}
 
 	if netConf.ContIPv6.IP != nil {
-		rules6, err := forwardPorts(netConf, netConf.ContIPv6, v6egress)
+		rules6, err := forwardPorts(netConf, netConf.ContIPv6)
 		if err != nil {
 			return err
 		}
