@@ -630,29 +630,18 @@ func cmdDel(args *skel.CmdArgs) error {
 	// If the device isn't there then don't try to clean up IP masq either.
 	hostEpair := result.Interfaces[1]
 	if err := exec.Command("ifconfig", hostEpair.Name, "destroy").Run(); err != nil {
-		return fmt.Errorf("failed to delete interface %s: %v", hostEpair.Name, err)
+		err = fmt.Errorf("failed to delete interface %s: %v", hostEpair.Name, err)
 	}
 
-	/*var ipnets []*net.IPNet
-	err = ns.WithNetNSPath(args.Netns, func(_ ns.NetNS) error {
-		var err error
-		ipnets, err = ip.DelLinkByNameAddr(args.IfName)
-		if err != nil && err == ip.ErrLinkNotFound {
-			return nil
-		}
-		return err
-	})
-
 	if err != nil {
-		//  if NetNs is passed down by the Cloud Orchestration Engine, or if it called multiple times
-		// so don't return an error if the device is already removed.
-		// https://github.com/kubernetes/kubernetes/issues/43014#issuecomment-287164444
-		_, ok := err.(ns.NSPathNotExistErr)
-		if ok {
-			return ipamDel()
+		// Check to see if the interface exists at all and if so, ignore
+		// the error.
+		if err2 := exec.Command("ifconfig", hostEpair.Name).Run(); err2 != nil {
+			err = nil
+		} else {
+			return err
 		}
-		return err
-	}*/
+	}
 
 	// call ipam.ExecDel after clean up device in netns
 	if err := ipamDel(); err != nil {
