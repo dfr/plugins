@@ -78,10 +78,9 @@ func checkPorts(config *PortMapConf, containerNet net.IPNet) error {
 func forwardPorts(config *PortMapConf, containerNet net.IPNet, ifname string) ([]string, error) {
 	var res []string
 	for _, pmap := range config.RuntimeConfig.PortMaps {
-		// rdr pass on egress proto tcp from any to (egress) port 8080 -> 10.89.0.77 port 80
 		res = append(res,
 			fmt.Sprintf(
-				"rdr on %s proto tcp from any to (%s) port %d -> %s port %d",
+				"rdr pass on %s proto tcp from any to (%s) port %d -> %s port %d",
 				ifname, ifname, pmap.HostPort, containerNet.IP.String(), pmap.ContainerPort))
 
 	}
