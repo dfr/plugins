@@ -28,8 +28,6 @@ import (
 const lastIPFilePrefix = "last_reserved_ip."
 const LineBreak = "\r\n"
 
-var defaultDataDir = "/var/lib/cni/networks"
-
 // Store is a simple disk-backed store that creates one file per IP
 // address in a given directory. The contents of the file are the container ID.
 type Store struct {
