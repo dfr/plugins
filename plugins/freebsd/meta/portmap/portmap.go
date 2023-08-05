@@ -86,10 +86,14 @@ func forwardPorts(config *PortMapConf, containerNet net.IPNet) ([]string, error)
 		} else {
 			af = "inet6"
 		}
+		hostIP := pmap.HostIP
+		if hostIP == "" {
+			hostIP = "self"
+		}
 		res = append(res,
 			fmt.Sprintf(
-				"rdr pass %s proto tcp from any to ! %s port %d -> %s port %d",
-				af, containerIP, pmap.HostPort, containerIP, pmap.ContainerPort))
+				"rdr pass %s proto %s from any to %s port %d -> %s port %d",
+				af, pmap.Protocol, hostIP, pmap.HostPort, containerIP, pmap.ContainerPort))
 	}
 	return res, nil
 }
