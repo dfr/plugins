@@ -17,21 +17,18 @@ package ipam
 import (
 	"fmt"
 	"net"
-	"os/exec"
 
 	current "github.com/containernetworking/cni/pkg/types/100"
+	"github.com/containernetworking/plugins/pkg/utils"
+
+	"github.com/gizahNL/gojail"
 )
 
 // ConfigureIface takes the result of IPAM plugin and
 // applies to the ifName interface
-func ConfigureIface(ifName string, res *current.Result) error {
+func ConfigureIface(contNS gojail.Jail, ifName string, res *current.Result) error {
 	if len(res.Interfaces) == 0 {
 		return fmt.Errorf("no interfaces to configure")
-	}
-
-	link, err := net.InterfaceByName(ifName)
-	if err != nil {
-		return fmt.Errorf("failed to lookup %q: %v", ifName, err)
 	}
 
 	var v4gw, v6gw net.IP
@@ -51,7 +48,7 @@ func ConfigureIface(ifName string, res *current.Result) error {
 		} else {
 			fam = "inet"
 		}
-		if err := exec.Command("ifconfig", link.Name, fam, ipc.Address.String()).Run(); err != nil {
+		if err := utils.RunCommandInJail(contNS, "ifconfig", ifName, fam, ipc.Address.String()); err != nil {
 			return fmt.Errorf("failed to add address %q: %v", ipc.String(), err)
 		}
 
@@ -63,7 +60,7 @@ func ConfigureIface(ifName string, res *current.Result) error {
 		}
 	}
 
-	if err := exec.Command("ifconfig", link.Name, "up").Run(); err != nil {
+	if err := utils.RunCommandInJail(contNS, "ifconfig", ifName, "up"); err != nil {
 		return fmt.Errorf("failed to set %q UP: %v", ifName, err)
 	}
 
@@ -87,7 +84,7 @@ func ConfigureIface(ifName string, res *current.Result) error {
 		} else {
 			fam = "-6"
 		}
-		if err := exec.Command("route", fam, "add", "-net", r.Dst.String(), gw.String()).Run(); err != nil {
+		if err := utils.RunCommandInJail(contNS, "route", fam, "add", "-net", r.Dst.String(), gw.String()); err != nil {
 			return fmt.Errorf("failed to add route from %s to %s: %v", r.Dst.String(), gw.String(), err)
 		}
 	}

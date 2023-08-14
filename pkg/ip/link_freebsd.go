@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/containernetworking/plugins/pkg/utils"
 	"github.com/gizahNL/gojail"
 )
 
@@ -48,7 +49,7 @@ func makeEpair(contName, hostName string, mtu int, mac string, contNS gojail.Jai
 		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to lookup interface %s: %v", hostName, err)
 	}
-	if err := exec.Command("ifconfig", ifA.Name, "description", fmt.Sprintf("associated with jail: %d as nic: %s", contNS.ID(), contName)).Run(); err != nil {
+	if err := exec.Command("ifconfig", ifA.Name, "description", fmt.Sprintf("associated with jail: %s as nic: %s", contNS.Name(), contName)).Run(); err != nil {
 		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to set description interface %s: %v", ifA.Name, err)
 	}
@@ -78,12 +79,11 @@ func makeEpair(contName, hostName string, mtu int, mac string, contNS gojail.Jai
 	}
 
 	// Move the b side into the jail before setting its name
-	jid := strconv.Itoa(int(contNS.ID()))
-	if err := exec.Command("ifconfig", ifB.Name, "vnet", jid).Run(); err != nil {
+	if err := exec.Command("ifconfig", ifB.Name, "vnet", contNS.Name()).Run(); err != nil {
 		cleanEpair(ifA.Name)
-		return nil, nil, fmt.Errorf("failed to move %s to jail %s : %v", ifB.Name, jid, err)
+		return nil, nil, fmt.Errorf("failed to move %s to jail %s : %v", ifB.Name, contNS.Name(), err)
 	}
-	if err := exec.Command("jexec", jid, "ifconfig", ifB.Name, "name", contName).Run(); err != nil {
+	if err := utils.RunCommandInJail(contNS, "ifconfig", ifB.Name, "name", contName); err != nil {
 		cleanEpair(ifA.Name)
 		return nil, nil, fmt.Errorf("failed to set name %s interface %s: %v", contName, epairB, err)
 	}

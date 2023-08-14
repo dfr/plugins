@@ -525,9 +525,6 @@ func cmdAdd(args *skel.CmdArgs) error {
 		}
 
 		// Configure the container hardware address and IP address(es)
-		if err := jail.Attach(); err != nil {
-			return err
-		}
 
 		/*if n.EnableDad {
 			_, _ = sysctl.Sysctl(fmt.Sprintf("/net/ipv6/conf/%s/enhanced_dad", args.IfName), "1")
@@ -538,7 +535,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		_, _ = sysctl.Sysctl(fmt.Sprintf("net/ipv4/conf/%s/arp_notify", args.IfName), "1")*/
 
 		// Add the IP to the interface
-		if err := ipam.ConfigureIface(args.IfName, result); err != nil {
+		if err := ipam.ConfigureIface(jail, args.IfName, result); err != nil {
 			return err
 		}
 
