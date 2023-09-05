@@ -65,6 +65,7 @@ type PortMapConf struct {
 	ContainerID string    `json:"-"`
 	ContIPv4    net.IPNet `json:"-"`
 	ContIPv6    net.IPNet `json:"-"`
+	BrName      string    `json:"-"`
 }
 
 // The default mark bit to signal that masquerading is required
@@ -94,6 +95,12 @@ func forwardPorts(config *PortMapConf, containerNet net.IPNet) ([]string, error)
 			fmt.Sprintf(
 				"rdr pass %s proto %s from any to %s port %d -> %s port %d",
 				af, pmap.Protocol, hostIP, pmap.HostPort, containerIP, pmap.ContainerPort))
+		if *config.SNAT {
+			res = append(res,
+				fmt.Sprintf(
+					"nat on %s %s proto %s from (lo0) to %s port %d -> (%s)",
+					config.BrName, af, pmap.Protocol, containerIP, pmap.ContainerPort, config.BrName))
+		}
 	}
 	return res, nil
 }
@@ -112,18 +119,12 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return fmt.Errorf("must be called as chained plugin")
 	}
 
-	// Try to parse pf.conf to pick up the v4/v6 egress interfaces
-	out, err := exec.Command("grep", "^[[:space:]]*\\(v[46]\\)\\?egress_if[[:space:]]*=", "/etc/pf.conf").Output()
-	var rules []string
-	if err == nil {
-		rules = strings.Split(string(out), "\n")
-	}
-
 	if len(netConf.RuntimeConfig.PortMaps) == 0 {
 		return types.PrintResult(netConf.PrevResult, netConf.CNIVersion)
 	}
 
 	netConf.ContainerID = args.ContainerID
+	var rules []string
 
 	if netConf.ContIPv4.IP != nil {
 		rules4, err := forwardPorts(netConf, netConf.ContIPv4)
@@ -256,6 +257,9 @@ func parseConfig(stdin []byte, ifName string) (*PortMapConf, *current.Result, er
 	}
 
 	if conf.PrevResult != nil {
+		if len(result.Interfaces) > 0 {
+			conf.BrName = result.Interfaces[0].Name
+		}
 		for _, ip := range result.IPs {
 			isIPv4 := ip.Address.IP.To4() != nil
 			if !isIPv4 && conf.ContIPv6.IP != nil {
