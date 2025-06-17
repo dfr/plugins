@@ -78,28 +78,49 @@ func checkPorts(config *PortMapConf, containerNet net.IPNet) error {
 
 func forwardPorts(config *PortMapConf, containerNet net.IPNet) ([]string, error) {
 	var res []string
+	containerIP := containerNet.IP.String()
+
+	// Determine container's address family
+	var containerAF string
+	if containerNet.IP.To4() != nil {
+		containerAF = "inet"
+	} else {
+		containerAF = "inet6"
+	}
+
 	for _, pmap := range config.RuntimeConfig.PortMaps {
-		// rdr inet proto tcp from any to ! 10.89.0.77 port 8080 -> 10.89.0.77 port 80
-		containerIP := containerNet.IP.String()
-		var af string
-		if containerNet.IP.To4() != nil {
-			af = "inet"
-		} else {
-			af = "inet6"
+		// Only create rules if host IP is compatible with container IP family
+		if pmap.HostIP != "" {
+			// Parse the host IP to determine if it's IPv4 or IPv6
+			hostIPParsed := net.ParseIP(pmap.HostIP)
+			if hostIPParsed == nil {
+				return nil, fmt.Errorf("invalid host IP: %s", pmap.HostIP)
+			}
+
+			// Check if host IP family matches container IP family
+			hostIsIPv4 := hostIPParsed.To4() != nil
+			containerIsIPv4 := containerNet.IP.To4() != nil
+
+			if hostIsIPv4 != containerIsIPv4 {
+				// Skip this rule - address families don't match
+				continue
+			}
 		}
+
 		hostIP := pmap.HostIP
 		if hostIP == "" {
 			hostIP = "self"
 		}
+
 		res = append(res,
 			fmt.Sprintf(
 				"rdr pass %s proto %s from any to %s port %d -> %s port %d",
-				af, pmap.Protocol, hostIP, pmap.HostPort, containerIP, pmap.ContainerPort))
+				containerAF, pmap.Protocol, hostIP, pmap.HostPort, containerIP, pmap.ContainerPort))
 		if *config.SNAT {
 			res = append(res,
 				fmt.Sprintf(
 					"nat on %s %s proto %s from (lo0) to %s port %d -> (%s)",
-					config.BrName, af, pmap.Protocol, containerIP, pmap.ContainerPort, config.BrName))
+					config.BrName, containerAF, pmap.Protocol, containerIP, pmap.ContainerPort, config.BrName))
 		}
 	}
 	return res, nil
