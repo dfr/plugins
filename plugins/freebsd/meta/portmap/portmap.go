@@ -121,6 +121,15 @@ func forwardPorts(config *PortMapConf, containerNet net.IPNet) ([]string, error)
 				fmt.Sprintf(
 					"nat on %s %s proto %s from (lo0) to %s port %d -> (%s)",
 					config.BrName, containerAF, pmap.Protocol, containerIP, pmap.ContainerPort, config.BrName))
+			// Hairpin: a connection the container opens to its own
+			// published port is redirected back to it with its own
+			// address as the source, so the reply never leaves the
+			// container and the connection times out. Translate the
+			// source to the bridge address, as for (lo0) above.
+			res = append(res,
+				fmt.Sprintf(
+					"nat on %s %s proto %s from %s to %s port %d -> (%s)",
+					config.BrName, containerAF, pmap.Protocol, containerIP, containerIP, pmap.ContainerPort, config.BrName))
 		}
 	}
 	return res, nil
